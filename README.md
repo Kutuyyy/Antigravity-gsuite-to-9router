@@ -61,7 +61,7 @@ Edit the constants at the top of each script if your setup differs from defaults
 |----------|---------|-------------|
 | `ROUTER_URL` | `http://localhost:20128` | 9Router server address |
 | `ROUTER_PASSWORD` | `123456` | 9Router dashboard password — **harus pakai password default** |
-| `CONCURRENCY` | `1` | Accounts processed simultaneously |
+| `CONCURRENCY` | `5` | Accounts processed simultaneously |
 
 > **Browser auto-detection**: `bot.js` automatically finds Chrome, Edge, or Brave on your system (Windows, Linux, macOS). If none are found, it falls back to Puppeteer's bundled Chromium.
 
