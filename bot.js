@@ -5,8 +5,6 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 
-// Palet console: ok=hijau, err=merah, g=[Google] biru, api=[API] magenta,
-// r9=[9Router] cyan, t=timer kuning, b=bold, dim=abu-abu.
 const C = {
   ok: (s) => chalk.green(s),
   err: (s) => chalk.red(s),
