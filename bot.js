@@ -1,9 +1,22 @@
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+const chalk = require('chalk');
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
 
+// Palet console: ok=hijau, err=merah, g=[Google] biru, api=[API] magenta,
+// r9=[9Router] cyan, t=timer kuning, b=bold, dim=abu-abu.
+const C = {
+  ok: (s) => chalk.green(s),
+  err: (s) => chalk.red(s),
+  g: (s) => chalk.blue(s),
+  api: (s) => chalk.magenta(s),
+  r9: (s) => chalk.cyan(s),
+  t: (s) => chalk.yellow(s),
+  b: (s) => chalk.bold(s),
+  dim: (s) => chalk.gray(s),
+};
 
 const stealth = StealthPlugin();
 stealth.enabledEvasions.delete('navigator.webdriver');
@@ -29,7 +42,6 @@ function getProfileDir(email) {
   seedProfilePrefs(dir);
   return dir;
 }
-
 function seedProfilePrefs(profileDir) {
   const prefFile = path.join(profileDir, 'Preferences');
   if (fs.existsSync(prefFile)) return;
@@ -134,6 +146,7 @@ async function clickAccountTile(page, email) {
       for (const el of els) {
         const txt = (el.innerText || '').toLowerCase();
         if (!txt.includes(needle)) continue;
+        // pastikan elemen terlihat
         const r = el.getBoundingClientRect();
         if (r.width === 0 || r.height === 0) continue;
         const clickable = el.closest('button, a, div[role="button"], div[role="link"]') || el;
@@ -280,7 +293,7 @@ function removeAccount(rawLine) {
 }
 
 async function routerLogin() {
-  console.log('[9Router] Login...');
+  console.log(C.r9('[9Router] Login...'));
   const res = await request('POST', `${ROUTER_URL}/api/auth/login`, {
     body: { password: ROUTER_PASSWORD },
   });
@@ -294,7 +307,7 @@ async function routerLogin() {
     throw new Error('Cookie auth_token tidak ditemukan di response');
   }
 
-  console.log('[9Router] ✓ Login berhasil');
+  console.log(C.ok('[9Router] ✓ Login berhasil'));
   return cookie;
 }
 
@@ -363,7 +376,7 @@ async function googleLogin(browser, authUrl, email, password) {
     await page.goto(authUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
     if (authCode) {
-      console.log(`  [Google] ✓ Auth code (auto-redirect, sesi profile masih valid)`);
+      console.log(C.ok(`  [Google] ✓ Auth code (auto-redirect, sesi profile masih valid)`));
       return authCode;
     }
 
@@ -377,7 +390,7 @@ async function googleLogin(browser, authUrl, email, password) {
       );
     }
 
-    console.log(`  [Google] Email...`);
+    console.log(C.g(`  [Google] Email...`));
     await page.waitForSelector('#identifierId', { visible: true, timeout: 15000 });
     await sleep(rand(800, 1800));
     await page.click('#identifierId', { clickCount: 3 }).catch(() => {});
@@ -385,7 +398,7 @@ async function googleLogin(browser, authUrl, email, password) {
     await sleep(rand(600, 1400));
     await page.keyboard.press('Enter');
 
-    console.log(`  [Google] Password...`);
+    console.log(C.g(`  [Google] Password...`));
     await sleep(rand(2000, 3500));
 
     if (await isBlockedPage(page)) {
@@ -429,8 +442,8 @@ async function googleLogin(browser, authUrl, email, password) {
       }
       const debugFile = path.join(__dirname, `debug-${email.split('@')[0]}.png`);
       await page.screenshot({ path: debugFile, fullPage: true });
-      console.log(`  [DEBUG] URL: ${page.url()}`);
-      console.log(`  [DEBUG] Screenshot: ${debugFile}`);
+      console.log(C.dim(`  [DEBUG] URL: ${page.url()}`));
+      console.log(C.dim(`  [DEBUG] Screenshot: ${debugFile}`));
       throw new Error('Password field tidak ditemukan — cek screenshot');
     }
 
@@ -439,7 +452,8 @@ async function googleLogin(browser, authUrl, email, password) {
     await sleep(rand(600, 1400));
     await page.keyboard.press('Enter');
 
-    console.log(`  [Google] Consent...`);
+    console.log(C.g(`  [Google] Consent...`));
+
     const consentDeadline = Date.now() + 90000;
     let consented = false;
     while (!authCode && Date.now() < consentDeadline) {
@@ -458,23 +472,19 @@ async function googleLogin(browser, authUrl, email, password) {
       }
 
       if (await dismissChromeSigninPopup(page)) {
-        console.log(`  [Google] Popup Chrome di-skip (without an account)`);
         await sleep(1500);
         continue;
       }
       if (await clickConsentApprove(page)) {
-        console.log(`  [Google] Approve diklik (Sign in/Allow/Continue)`);
         consented = true;
         await sleep(1500);
         continue;
       }
       if (!consented && await clickAccountTile(page, email)) {
-        console.log(`  [Google] Akun dipilih`);
         await sleep(2000);
         continue;
       }
       if (await clickUnknownNext(page)) {
-        console.log(`  [Google] Something-wrong -> Next`);
         await sleep(2500);
         continue;
       }
@@ -493,11 +503,11 @@ async function googleLogin(browser, authUrl, email, password) {
     if (!authCode) {
       const debugFile = path.join(__dirname, `debug-${email.split('@')[0]}.png`);
       try { await page.screenshot({ path: debugFile, fullPage: true }); } catch {}
-      console.log(`  [DEBUG] URL terakhir: ${page.url()}`);
+      console.log(C.dim(`  [DEBUG] URL terakhir: ${page.url()}`));
       throw new Error(`Auth code tidak ter-capture (timeout 90s). Screenshot: ${debugFile}`);
     }
 
-    console.log(`  [Google] ✓ Auth code didapat`);
+    console.log(C.ok(`  [Google] ✓ Auth code didapat`));
     return authCode;
   } finally {
     try { page.off('request', onRequest); } catch {}
@@ -510,17 +520,18 @@ async function googleLogin(browser, authUrl, email, password) {
 async function loginAccount(browser, cookie, account, index, total) {
   const { email, password } = account;
   const t0 = Date.now();
-  console.log(`\n[${index + 1}/${total}] ${email}`);
+  console.log(C.b(`\n[${index + 1}/${total}] ${email}`));
 
-  console.log(`  [API] OAuth authorize...`);
+  console.log(C.api(`  [API] OAuth authorize...`));
   const { authUrl, codeVerifier, state } = await startOAuth(cookie);
+
   const authCode = await googleLogin(browser, authUrl, email, password);
 
-  console.log(`  [API] Exchange token...`);
+  console.log(C.api(`  [API] Exchange token...`));
   const result = await exchangeToken(cookie, { code: authCode, codeVerifier, state });
 
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
-  console.log(`[✓] ${email} — ${elapsed}s (${result.connection?.id || 'OK'})`);
+  console.log(C.ok(`[✓] ${email} — ${C.t(`${elapsed}s`)} (${result.connection?.id || 'OK'})`));
   removeAccount(account.raw);
   return true;
 }
@@ -528,23 +539,24 @@ async function loginAccount(browser, cookie, account, index, total) {
 (async () => {
   const accounts = readAccounts();
   if (accounts.length === 0) {
-    console.log('Tidak ada akun di akun.txt');
+    console.log(C.t('Tidak ada akun di akun.txt'));
     return;
   }
 
-  console.log(`Total akun: ${accounts.length}`);
+  console.log(C.b(`Total akun: ${accounts.length}`));
 
   const browser_info = detectBrowser();
   console.log(`Browser: ${browser_info.name}${browser_info.path ? ` (${browser_info.path})` : ''}`);
   console.log(`Mode: 1 browser + ${CONCURRENCY} incognito (stealth, tanpa jeda)`);
-  console.log(`Profiles: ${PROFILE_BASE}\n`);
+  console.log(C.dim(`Profiles: ${PROFILE_BASE}\n`));
+
   try {
     if (fs.existsSync(PROFILE_BASE)) {
       fs.rmSync(PROFILE_BASE, { recursive: true, force: true });
-      console.log(`[Cleanup] ✓ Sisa profiles/ lama dibersihkan`);
+      console.log(C.ok(`[Cleanup] ✓ Sisa profiles/ lama dibersihkan`));
     }
   } catch (e) {
-    console.warn(`[Cleanup] Gagal bersihkan profiles/: ${e.message}`);
+    console.warn(C.t(`[Cleanup] Gagal bersihkan profiles/: ${e.message}`));
   }
 
   if (!browser_info.path || browser_info.name.includes('bundled')) {
@@ -557,7 +569,7 @@ async function loginAccount(browser, cookie, account, index, total) {
   const cookie = await routerLogin();
 
   const runProfileDir = getProfileDir('shared-run');
-  console.log(`[Browser] Launching 1x: ${runProfileDir}`);
+  console.log(C.r9(`[Browser] Launching 1x: ${runProfileDir}`));
   const browser = await puppeteer.launch(buildLaunchOptions(browser_info, runProfileDir));
 
   let successCount = 0;
@@ -573,7 +585,7 @@ async function loginAccount(browser, cookie, account, index, total) {
         await loginAccount(browser, cookie, account, i + batchIdx, accounts.length);
         return true;
       } catch (error) {
-        console.error(`[✗] ${account.email}: ${error.message}`);
+        console.error(C.err(`[✗] ${account.email}: ${error.message}`));
         return false;
       }
     }));
@@ -585,21 +597,21 @@ async function loginAccount(browser, cookie, account, index, total) {
   }
   } finally {
     try { await browser.close(); } catch {}
-    console.log(`\n[Browser] ✓ Ditutup`);
+    console.log(C.ok(`\n[Browser] ✓ Ditutup`));
   }
 
   const totalTime = ((Date.now() - t0) / 1000).toFixed(1);
-  console.log(`\n========================================`);
-  console.log(`Selesai dalam ${totalTime}s`);
-  console.log(`Sukses: ${successCount} | Gagal: ${failCount}`);
-  console.log(`========================================`);
+  console.log(C.b(`\n========================================`));
+  console.log(`Selesai dalam ${C.t(`${totalTime}s`)}`);
+  console.log(`${C.ok(`Sukses: ${successCount}`)} | ${C.err(`Gagal: ${failCount}`)}`);
+  console.log(C.b(`========================================`));
 
   try {
     if (fs.existsSync(PROFILE_BASE)) {
       fs.rmSync(PROFILE_BASE, { recursive: true, force: true });
-      console.log(`[Cleanup] ✓ Folder profiles/ dihapus`);
+      console.log(C.ok(`[Cleanup] ✓ Folder profiles/ dihapus`));
     }
   } catch (e) {
-    console.warn(`[Cleanup] Gagal hapus profiles/: ${e.message}`);
+    console.warn(C.t(`[Cleanup] Gagal hapus profiles/: ${e.message}`));
   }
 })();
